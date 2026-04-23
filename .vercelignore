@@ -4,9 +4,6 @@ api/server.js
 # Tests
 api/app.test.js
 
-# Build tooling (not needed at runtime)
-scripts/
-
 # Raw card source data (only needed during build)
 data/sources/
 
