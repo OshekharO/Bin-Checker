@@ -4,6 +4,7 @@ const { URL } = require('url');
 const checker = require('../libs/javascript');
 
 const JSON_CONTENT_TYPE = { 'Content-Type': 'application/json; charset=utf-8' };
+const MAX_REQUEST_BODY_SIZE = 1_000_000;
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, JSON_CONTENT_TYPE);
@@ -19,28 +20,42 @@ function normalizeDigits(value) {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
+    let completed = false;
+
+    function done(err, payload) {
+      if (completed) return;
+      completed = true;
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(payload);
+    }
 
     req.on('data', chunk => {
+      if (completed) return;
       body += chunk;
-      if (body.length > 1_000_000) {
-        reject(new Error('Request body too large'));
+      if (body.length > MAX_REQUEST_BODY_SIZE) {
+        done(new Error('Request body too large'));
+        req.destroy();
       }
     });
 
     req.on('end', () => {
+      if (completed) return;
       if (!body) {
-        resolve({});
+        done(null, {});
         return;
       }
 
       try {
-        resolve(JSON.parse(body));
+        done(null, JSON.parse(body));
       } catch (error) {
-        reject(new Error('Invalid JSON body'));
+        done(new Error('Invalid JSON body'));
       }
     });
 
-    req.on('error', () => reject(new Error('Failed to read request body')));
+    req.on('error', err => done(err));
   });
 }
 
@@ -51,6 +66,10 @@ function parseBoolean(value, defaultValue = false) {
     return lowered === 'true' || lowered === '1';
   }
   return defaultValue;
+}
+
+function readCardNumber(body) {
+  return normalizeDigits(body && body.cardNumber);
 }
 
 function createHandler() {
@@ -86,7 +105,7 @@ function createHandler() {
     if (method === 'POST' && pathname === '/support') {
       try {
         const body = await readJsonBody(req);
-        const cardNumber = normalizeDigits(body.cardNumber);
+        const cardNumber = readCardNumber(body);
 
         if (!cardNumber) {
           sendJson(res, 400, { error: 'cardNumber is required' });
@@ -103,7 +122,7 @@ function createHandler() {
     if (method === 'POST' && pathname === '/luhn') {
       try {
         const body = await readJsonBody(req);
-        const cardNumber = normalizeDigits(body.cardNumber);
+        const cardNumber = readCardNumber(body);
 
         if (!cardNumber) {
           sendJson(res, 400, { error: 'cardNumber is required' });
@@ -120,7 +139,7 @@ function createHandler() {
     if (method === 'POST' && pathname === '/check') {
       try {
         const body = await readJsonBody(req);
-        const cardNumber = normalizeDigits(body.cardNumber);
+        const cardNumber = readCardNumber(body);
 
         if (!cardNumber) {
           sendJson(res, 400, { error: 'cardNumber is required' });
@@ -129,11 +148,12 @@ function createHandler() {
 
         const detailed = parseBoolean(body.detailed, false);
         const supported = checker.isSupported(cardNumber);
+        const luhnValid = checker.luhn(cardNumber);
 
         if (!supported) {
           sendJson(res, 200, {
             supported: false,
-            luhnValid: checker.luhn(cardNumber),
+            luhnValid,
             brand: null,
             cvvValid: null
           });
@@ -143,7 +163,7 @@ function createHandler() {
         const brand = checker.findBrand(cardNumber, detailed);
         const response = {
           supported: true,
-          luhnValid: checker.luhn(cardNumber),
+          luhnValid,
           brand,
           cvvValid: null
         };
@@ -165,8 +185,5 @@ function createHandler() {
 }
 
 module.exports = {
-  createHandler,
-  normalizeDigits,
-  readJsonBody,
-  parseBoolean
+  createHandler
 };
