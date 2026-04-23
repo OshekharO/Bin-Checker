@@ -159,6 +159,25 @@ function createHandler() {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     const pathname = requestUrl.pathname;
 
+    if (method === 'GET' && (pathname === '/' || pathname === '')) {
+      sendJson(res, 200, {
+        name: 'Bin Checker API',
+        version: '1.0.0',
+        endpoints: [
+          'GET  /health',
+          'GET  /brands',
+          'GET  /brands/:scheme',
+          'GET  /brands/:scheme?detailed=true',
+          'GET  /bin/:bin',
+          'POST /bin          { bin }',
+          'POST /check        { cardNumber, cvv?, detailed? }',
+          'POST /support      { cardNumber }',
+          'POST /luhn         { cardNumber }',
+        ]
+      });
+      return;
+    }
+
     if (method === 'GET' && pathname === '/health') {
       sendJson(res, 200, { status: 'ok' });
       return;

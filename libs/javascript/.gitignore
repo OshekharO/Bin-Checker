@@ -1,5 +1,9 @@
 # Generated data files (built by npm run build)
-data/
+# brands.js (8 KB) is committed so the data is visible in git
+# brands-detailed.js is excluded because it is ~40 MB
+data/brands-detailed.js
+data/brands-detailed.d.ts
+data/brands.d.ts
 
 # Dependencies
 node_modules/
