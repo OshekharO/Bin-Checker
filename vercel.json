@@ -6,5 +6,8 @@
       "memory": 128,
       "maxDuration": 10
     }
-  }
+  },
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ]
 }
