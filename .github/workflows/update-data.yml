@@ -1,0 +1,80 @@
+name: Update & Compile Data
+
+# Runs every Sunday at 02:00 UTC, and can be triggered manually at any time.
+on:
+  schedule:
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: Rebuild & commit compiled data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Use the default branch so the commit lands on main/master.
+          ref: ${{ github.event.repository.default_branch }}
+          # Full history lets git status / diff work correctly.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── Install root dependencies (build tooling) ─────────────────────────
+      - name: Install root dependencies
+        run: npm install --ignore-scripts
+
+      # ── Validate sources before building ─────────────────────────────────
+      - name: Validate source data
+        run: npm run validate
+
+      # ── Rebuild all compiled outputs ──────────────────────────────────────
+      - name: Build compiled data and JS library files
+        run: npm run build
+
+      # ── Install JS library dev-dependencies ──────────────────────────────
+      - name: Install JS library dependencies
+        run: npm --prefix libs/javascript install
+
+      # ── Run full test suite to confirm the rebuilt data is healthy ────────
+      - name: Run JS library tests
+        run: npm --prefix libs/javascript test
+
+      - name: Run API tests
+        run: npm run api:test
+
+      # ── Commit & push any changes in compiled outputs ─────────────────────
+      - name: Commit updated compiled outputs
+        run: |
+          git config user.name  "saksham-shekher"
+          git config user.email "saksham-shekher@users.noreply.github.com"
+
+          # Stage only the files that the build process produces/updates.
+          git add \
+            data/compiled/cards.json \
+            data/compiled/cards-detailed.json \
+            data/compiled/conflicts.json \
+            data/compiled/BRANDS.md \
+            libs/javascript/data/brands.js
+
+          # Bail out gracefully when nothing changed.
+          if git diff --cached --quiet; then
+            echo "✓ No changes to compiled outputs — nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(data): rebuild compiled outputs [skip ci]
+
+          Triggered by scheduled data-update workflow.
+          Rebuilt: data/compiled/* and libs/javascript/data/brands.js"
+
+          git push origin ${{ github.event.repository.default_branch }}
